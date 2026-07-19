@@ -127,3 +127,30 @@ public class FeishuDepartmentListResponse
     public string Msg { get; set; }
     public FeishuDepartmentListData Data { get; set; }
 }
+
+// ── 飞书授权范围响应 ──
+public class FeishuScopesResponse
+{
+    public int Code { get; set; }
+    public string Msg { get; set; }
+    public FeishuScopesData Data { get; set; }
+}
+
+public class FeishuScopesData
+{
+    [JsonProperty("user_ids")]
+    public List<string>? UserIds { get; set; }
+}
+
+// ── 飞书单个用户详情响应 ──
+public class FeishuSingleUserResponse
+{
+    public int Code { get; set; }
+    public string Msg { get; set; }
+    public FeishuSingleUserData Data { get; set; }
+}
+
+public class FeishuSingleUserData
+{
+    public FeishuUser User { get; set; }
+}

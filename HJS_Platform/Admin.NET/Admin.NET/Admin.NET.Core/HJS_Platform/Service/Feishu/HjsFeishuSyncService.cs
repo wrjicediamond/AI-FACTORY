@@ -146,59 +146,71 @@ public class HjsFeishuSyncService : IDynamicApiController, ITransient
         var userResult = new UserSyncResult();
         try
         {
-            // 获取所有飞书部门
+            // 首选：通过部门遍历获取用户
             var allDepts = await _sysOrgRep.GetListAsync(o => !string.IsNullOrEmpty(o.FeishuDeptId));
             var allFeishuOpenIds = new HashSet<string>();
+            var allFeishuUsers = new List<FeishuUser>();
 
-            foreach (var dept in allDepts)
+            if (allDepts.Count > 0)
             {
-                var feishuUsers = await _feishuApi.GetDepartmentUsersAsync(dept.FeishuDeptId);
-                foreach (var feishuUser in feishuUsers)
+                foreach (var dept in allDepts)
                 {
-                    if (!allFeishuOpenIds.Add(feishuUser.OpenId))
-                        continue; // 跨部门重复跳过
+                    var feishuUsers = await _feishuApi.GetDepartmentUsersAsync(dept.FeishuDeptId);
+                    allFeishuUsers.AddRange(feishuUsers);
+                }
+            }
 
-                    try
+            // 备用：如果部门方式没拿到用户，通过 scopes 接口直接获取
+            if (allFeishuUsers.Count == 0)
+            {
+                allFeishuUsers = await _feishuApi.GetAllUsersViaScopesAsync();
+            }
+
+            foreach (var feishuUser in allFeishuUsers)
+            {
+                if (!allFeishuOpenIds.Add(feishuUser.OpenId))
+                    continue; // 去重
+
+                try
+                {
+                    var existing = await _feishuUserRep.GetFirstAsync(u => u.OpenId == feishuUser.OpenId);
+
+                    var entity = existing ?? new HjsFeishuUser();
+                    entity.OpenId = feishuUser.OpenId;
+                    entity.UserId = feishuUser.UserId;
+                    entity.UnionId = feishuUser.UnionId;
+                    entity.Name = feishuUser.Name ?? feishuUser.OpenId; // Name 可能为空，用 OpenId 兜底
+                    entity.EnName = feishuUser.EnName;
+                    entity.Email = feishuUser.Email;
+                    entity.Mobile = feishuUser.Mobile;
+                    entity.EmployeeNo = feishuUser.EmployeeNo;
+                    entity.JobTitle = feishuUser.JobTitle;
+                    entity.AvatarUrl = feishuUser.Avatar?.Avatar240;
+                    entity.DepartmentIds = feishuUser.DepartmentIds != null
+                        ? string.Join(",", feishuUser.DepartmentIds) : null;
+                    entity.LeaderUserId = feishuUser.LeaderUserId;
+                    entity.JoinTime = feishuUser.JoinTime.HasValue
+                        ? DateTimeOffset.FromUnixTimeSeconds(feishuUser.JoinTime.Value).DateTime
+                        : null;
+                    entity.IsActivated = feishuUser.Status?.IsActivated ?? true;
+                    entity.IsResigned = feishuUser.Status?.IsResigned ?? false;
+
+                    if (existing != null)
                     {
-                        var existing = await _feishuUserRep.GetFirstAsync(u => u.OpenId == feishuUser.OpenId);
-
-                        var entity = existing ?? new HjsFeishuUser();
-                        entity.OpenId = feishuUser.OpenId;
-                        entity.UserId = feishuUser.UserId;
-                        entity.UnionId = feishuUser.UnionId;
-                        entity.Name = feishuUser.Name;
-                        entity.EnName = feishuUser.EnName;
-                        entity.Email = feishuUser.Email;
-                        entity.Mobile = feishuUser.Mobile;
-                        entity.EmployeeNo = feishuUser.EmployeeNo;
-                        entity.JobTitle = feishuUser.JobTitle;
-                        entity.AvatarUrl = feishuUser.Avatar?.Avatar240;
-                        entity.DepartmentIds = feishuUser.DepartmentIds != null
-                            ? string.Join(",", feishuUser.DepartmentIds) : null;
-                        entity.LeaderUserId = feishuUser.LeaderUserId;
-                        entity.JoinTime = feishuUser.JoinTime.HasValue
-                            ? DateTimeOffset.FromUnixTimeSeconds(feishuUser.JoinTime.Value).DateTime
-                            : null;
-                        entity.IsActivated = feishuUser.Status?.IsActivated ?? true;
-                        entity.IsResigned = feishuUser.Status?.IsResigned ?? false;
-
-                        if (existing != null)
-                        {
-                            await _feishuUserRep.UpdateAsync(entity);
-                            userResult.Updated++;
-                        }
-                        else
-                        {
-                            await _feishuUserRep.InsertAsync(entity);
-                            userResult.Added++;
-                        }
+                        await _feishuUserRep.UpdateAsync(entity);
+                        userResult.Updated++;
                     }
-                    catch (Exception ex)
+                    else
                     {
-                        userResult.Failed++;
-                        userResult.Errors ??= new List<string>();
-                        userResult.Errors.Add($"人员[{feishuUser.Name}]: {ex.Message}");
+                        await _feishuUserRep.InsertAsync(entity);
+                        userResult.Added++;
                     }
+                }
+                catch (Exception ex)
+                {
+                    userResult.Failed++;
+                    userResult.Errors ??= new List<string>();
+                    userResult.Errors.Add($"人员[{feishuUser.Name ?? feishuUser.OpenId}]: {ex.Message}");
                 }
             }
 

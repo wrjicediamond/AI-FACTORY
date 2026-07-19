@@ -97,14 +97,14 @@ public class HjsFeishuImportService : IDynamicApiController, ITransient
         {
             // 新建 SysUser
             var account = GenerateAccount(feishuUser);
-            if (await _sysUserRep.AnyAsync(u => u.Account == account))
+            if (await _sysUserRep.AsQueryable().AnyAsync(u => u.Account == account))
                 throw Oops.Oh($"账号 [{account}] 已存在，请手动处理");
 
             sysUser = new SysUser
             {
                 Account = account,
                 RealName = feishuUser.Name,
-                Password = "123456".ToMD5String(),  // Furion 扩展方法
+                Password = MD5Encryption.Encrypt("123456"),  // Furion 加密方法
                 Phone = feishuUser.Mobile,
                 Email = feishuUser.Email,
                 Status = StatusEnum.Enable,

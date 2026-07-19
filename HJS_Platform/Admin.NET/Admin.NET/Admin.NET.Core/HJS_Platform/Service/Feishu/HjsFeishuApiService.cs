@@ -39,8 +39,8 @@ public class HjsFeishuApiService : IDynamicApiController, ITransient
 
     private async Task<string> RefreshAccessTokenAsync()
     {
-        var appId = await _sysConfigService.GetConfigValue("feishu_app_id");
-        var appSecret = await _sysConfigService.GetConfigValue("feishu_app_secret");
+        var appId = await _sysConfigService.GetConfigValue<string>("feishu_app_id");
+        var appSecret = await _sysConfigService.GetConfigValue<string>("feishu_app_secret");
 
         if (string.IsNullOrEmpty(appId) || string.IsNullOrEmpty(appSecret))
             throw Oops.Oh("飞书配置不完整，请先在系统配置中设置 feishu_app_id 和 feishu_app_secret");
@@ -106,6 +106,48 @@ public class HjsFeishuApiService : IDynamicApiController, ITransient
 
             pageToken = result.Data?.HasMore == true ? result.Data?.PageToken : null;
         } while (pageToken != null);
+    }
+
+    /// <summary>通过 scopes 接口直接获取所有用户（适用于无部门树的通讯录）</summary>
+    public async Task<List<FeishuUser>> GetAllUsersViaScopesAsync()
+    {
+        var users = new List<FeishuUser>();
+        var token = await GetAccessTokenAsync();
+        var client = _httpClientFactory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        // 1. 获取授权范围内的所有 user_ids
+        var scopesResponse = await client.GetAsync($"{FEISHU_BASE_URL}/contact/v3/scopes");
+        var scopesBody = await scopesResponse.Content.ReadAsStringAsync();
+        var scopesResult = JsonConvert.DeserializeObject<FeishuScopesResponse>(scopesBody);
+
+        if (scopesResult == null || scopesResult.Code != 0 || scopesResult.Data?.UserIds == null)
+            throw Oops.Oh($"获取飞书授权范围失败: {scopesResult?.Msg}");
+
+        var userIds = scopesResult.Data.UserIds;
+
+        // 2. 逐个获取用户详情
+        foreach (var userId in userIds)
+        {
+            try
+            {
+                var userResponse = await client.GetAsync(
+                    $"{FEISHU_BASE_URL}/contact/v3/users/{userId}?user_id_type=open_id");
+                var userBody = await userResponse.Content.ReadAsStringAsync();
+                var userResult = JsonConvert.DeserializeObject<FeishuSingleUserResponse>(userBody);
+
+                if (userResult?.Data?.User != null)
+                {
+                    users.Add(userResult.Data.User);
+                }
+            }
+            catch
+            {
+                // 单个用户获取失败不影响其他用户
+            }
+        }
+
+        return users;
     }
 
     /// <summary>获取部门下所有用户（含分页）</summary>

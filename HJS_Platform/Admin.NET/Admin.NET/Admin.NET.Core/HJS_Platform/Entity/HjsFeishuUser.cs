@@ -1,5 +1,6 @@
 using SqlSugar;
-using Admin.NET.Core.Entity;
+
+using Admin.NET.Core;
 
 namespace Admin.NET.Core.HJS_Platform.Entity;
 
