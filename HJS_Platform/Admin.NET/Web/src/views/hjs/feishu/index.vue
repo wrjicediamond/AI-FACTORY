@@ -72,11 +72,16 @@
       </el-table>
 
       <!-- 分页 -->
-      <pagination
-        v-model:page="state.query.Page"
-        v-model:limit="state.query.PageSize"
+      <el-pagination
+        size="small"
+        background
+        v-model:currentPage="state.query.Page"
+        v-model:page-size="state.query.PageSize"
         :total="state.total"
-        @pagination="getList" />
+        :page-sizes="[10, 20, 50, 100]"
+        layout="total, sizes, prev, pager, next, jumper"
+        @size-change="getList"
+        @current-change="getList" />
     </el-card>
 
     <!-- 导入弹窗 -->
