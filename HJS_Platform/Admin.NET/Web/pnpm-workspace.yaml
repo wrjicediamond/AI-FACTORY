@@ -1,0 +1,18 @@
+allowBuilds:
+  '@code-inspector/core': true
+  '@logicflow/core': true
+  '@parcel/watcher': true
+  '@vue-office/docx': true
+  '@vue-office/excel': true
+  '@vue-office/pdf': true
+  core-js: true
+  es5-ext: true
+  json-editor-vue: true
+  node-pty: true
+  vue-demi: true
+onlyBuiltDependencies:
+  - '@vue-office/docx'
+  - '@vue-office/excel'
+  - '@vue-office/pdf'
+packages:
+  - .
