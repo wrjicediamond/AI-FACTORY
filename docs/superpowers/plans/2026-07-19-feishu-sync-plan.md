@@ -1801,7 +1801,7 @@ Login to Admin.NET Web application → System Management → System Config → A
 
 - [ ] **Step 2: Create menu entries in Menu Management**
 
-Navigate to System Management → Menu Management → Add:
+Navigate to Platform Management → Menu Management → Add:
 
 **Directory entry:**
 | Field | Value |
