@@ -64,7 +64,7 @@ const onSubmit = async () => {
       res = await batchImport({ feishuUserIds: state.selectedIds });
     }
 
-    const r = res.result ?? {};
+    const r = res.data?.result ?? {};
     const successCount = r.successCount ?? (r.success ? 1 : 0);
     const failCount = r.failCount ?? (r.success ? 0 : 1);
 

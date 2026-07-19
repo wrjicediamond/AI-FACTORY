@@ -111,7 +111,7 @@ const state = reactive({
 const loadOverview = async () => {
   try {
     const res = await getFeishuOverview();
-    state.overview = res.result ?? state.overview;
+    state.overview = res.data?.result ?? state.overview;
   } catch { /* ignore */ }
 };
 
@@ -120,7 +120,7 @@ const onSyncDept = async () => {
   state.syncResult = { success: false, message: '', detail: '' };
   try {
     const res = await syncDepartments({ triggerType: 'Manual' });
-    const r = res.result ?? {};
+    const r = res.data?.result ?? {};
     state.syncResult = {
       success: r.success,
       message: r.success ? '部门同步完成' : '部门同步失败',
@@ -142,7 +142,7 @@ const onSyncUser = async () => {
   state.syncResult = { success: false, message: '', detail: '' };
   try {
     const res = await syncUsers({ triggerType: 'Manual' });
-    const r = res.result ?? {};
+    const r = res.data?.result ?? {};
     state.syncResult = {
       success: r.success,
       message: r.success ? '人员同步完成' : '人员同步失败',
@@ -164,7 +164,7 @@ const onSyncAll = async () => {
   state.syncResult = { success: false, message: '', detail: '' };
   try {
     const res = await syncAll({ triggerType: 'Manual' });
-    const r = res.result ?? {};
+    const r = res.data?.result ?? {};
     state.syncResult = {
       success: r.success,
       message: r.success ? '全量同步完成' : '全量同步失败',

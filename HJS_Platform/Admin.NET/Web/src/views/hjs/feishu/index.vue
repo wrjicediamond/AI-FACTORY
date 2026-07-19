@@ -103,8 +103,8 @@ const getList = async () => {
   state.loading = true;
   try {
     const res = await pageFeishuUser(state.query);
-    state.tableData = res.result?.items ?? [];
-    state.total = res.result?.total ?? 0;
+    state.tableData = res.data?.result?.items ?? [];
+    state.total = res.data?.result?.total ?? 0;
   } finally {
     state.loading = false;
   }
