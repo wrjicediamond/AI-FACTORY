@@ -1,48 +1,92 @@
 # HJS_Platform CRUD 完整开发规范
 
 > 基于 Admin.NET 2.4.33（Furion + SqlSugar ORM + Vue 3 + Element Plus）的全栈 CRUD 实战参考。
-> 适用于：从零开始为一个业务表编写完整的前后端 CRUD 功能。
+> 后端业务代码隔离在 `HJS_Platform/` 子文件夹中，前端以模块名前缀 `hjs` 合并到框架结构中。
+> 开发完成后通过 Admin.NET Web 后台配置菜单和权限。
 
 ---
 
 ## 1. 分层架构总览
 
 ```
-┌─────────────────────────────────────────────────┐
-│                   前端 (Vue 3)                    │
-│  views/{模块}/{小写表名}/index.vue     ← 页面    │
-│  views/{模块}/{小写表名}/component/   ← 组件    │
-│  api/{模块}/{小写表名}.ts             ← API 封装 │
-├─────────────────────────────────────────────────┤
-│           后端 (Furion 动态 API 路由)              │
-│  Service/{模块}/{表名}Service.cs      ← 服务    │
-│  Service/{模块}/Dto/{表名}Input.cs    ← 入参 DTO │
-│  Service/{模块}/Dto/{表名}Output.cs   ← 出参 DTO │
-│  Entity/{表名}.cs                     ← 实体    │
-├─────────────────────────────────────────────────┤
-│           SqlSugar ORM (数据访问层)               │
-│  直接使用 SqlSugarRepository<T> 泛型仓储          │
-│  无需手写 Repository 层                           │
-└─────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────┐
+│               前端 (src/ - 合并模式)                   │
+│  api/hjs/{表名}.ts                      ← API 封装  │
+│  views/hjs/{表名}/index.vue             ← 页面      │
+│  views/hjs/{表名}/component/editDialog.vue ← 弹窗   │
+├─────────────────────────────────────────────────────┤
+│          后端 (Admin.NET.Core/ - 子文件夹隔离)         │
+│  HJS_Platform/Entity/{实体}.cs          ← 实体      │
+│  HJS_Platform/Service/{模块}/             ← 服务     │
+│  HJS_Platform/Service/{模块}/Dto/         ← DTO     │
+├─────────────────────────────────────────────────────┤
+│  SqlSugar ORM (数据访问层)                            │
+│  直接使用 SqlSugarRepository<T> 泛型仓储              │
+├─────────────────────────────────────────────────────┤
+│  菜单/权限配置 (Admin.NET Web 后台)                    │
+│  系统管理 → 菜单管理 → 新增目录/菜单/按钮               │
+│  系统管理 → 角色管理 → 分配权限                        │
+└─────────────────────────────────────────────────────┘
 ```
 
-### 1.1 后端分层职责
+### 1.1 核心目录隔离策略
 
-| 层 | 位置 | 职责 | 关键接口/基类 |
-|----|------|------|-------------|
-| **Entity** | `Admin.NET.Core/Entity/` | 数据库表映射，字段注解 | `EntityBase` / `EntityBaseTenant` / `EntityBaseOrg` 等 |
-| **DTO Input** | `Service/{模块}/Dto/` | 接口入参校验，继承实体或基类 | `BasePageInput`, `BaseIdInput`, `BaseStatusInput` |
-| **DTO Output** | `Service/{模块}/Dto/` | 接口出参，可包含关联表字段 | 继承实体或独立定义 |
-| **Service** | `Service/{模块}/` | 业务逻辑 + API 端点 | `IDynamicApiController` + `ITransient` |
-| **Controller** | 无需手写 | Furion 自动生成 | — |
+| 层面 | 策略 | 原来路径 | 现路径 |
+|------|------|---------|-------|
+| **后端实体** | 子文件夹隔离 | `Entity/HjsXxx.cs` | `HJS_Platform/Entity/HjsXxx.cs` |
+| **后端服务** | 子文件夹隔离 | `Service/{模块}/` | `HJS_Platform/Service/{模块}/` |
+| **命名空间** | 追加 HJS_Platform 层级 | `Admin.NET.Core.Entity` | `Admin.NET.Core.HJS_Platform.Entity` |
+| **前端 API** | 合并 + 前缀区分 | `api/hjs/` | 不变（按模块名 `hjs` 区分） |
+| **前端页面** | 合并 + 前缀区分 | `views/hjs/` | 不变（按模块名 `hjs` 区分） |
 
-### 1.2 前端分层职责
+### 1.2 后端隔离目录结构
 
-| 层 | 位置 | 职责 |
-|----|------|------|
-| **API** | `src/api/{模块}/` | Axios 请求封装，保持和后端 API 一一对应 |
-| **View** | `src/views/{模块}/` | Element Plus 页面组件（表格 + 弹窗 + 表单） |
-| **Store** | `src/stores/` | Pinia 状态管理（复杂场景使用，简单 CRUD 可不加） |
+```
+Admin.NET.Core/
+├── Entity/                          ← 框架原有实体（不动）
+├── Service/                         ← 框架原有服务（不动）
+├── ...                              ← 框架原有其他（不动）
+│
+└── HJS_Platform/                    ← ── HJS 业务代码隔离区
+    ├── Entity/                      ←     HJS 实体
+    │   └── HjsProduct.cs            →     namespace: Admin.NET.Core.HJS_Platform.Entity
+    │
+    └── Service/                     ←     HJS 服务
+        ├── Product/                 ←     按业务表分包
+        │   ├── Dto/
+        │   │   ├── HjsProductInput.cs
+        │   │   └── HjsProductOutput.cs
+        │   └── HjsProductService.cs →     namespace: Admin.NET.Core.HJS_Platform.Service
+        ├── Order/
+        └── ...
+```
+
+### 1.3 前端合并目录结构
+
+```
+Web/src/
+├── api/
+│   ├── system/                     ← 框架原有（不动）
+│   ├── hjs/                        ← ── HJS API（按模块名前缀区分）
+│   │   └── product.ts
+│   └── ...
+├── views/
+│   ├── system/                     ← 框架原有（不动）
+│   ├── hjs/                        ← ── HJS 页面（按模块名前缀区分）
+│   │   └── product/
+│   │       ├── index.vue
+│   │       └── component/
+│   │           └── editDialog.vue
+│   └── ...
+├── api-services/                   ← Swagger 自动生成（不动）
+├── router/                         ← 不动（动态路由由菜单配置驱动）
+├── stores/                         ← 不动
+└── directive/                      ← 不动（v-auth 已内置）
+```
+
+> **为什么后端用子文件夹而不是独立项目？** 子文件夹在同一 `.csproj` 中，Furion `IDynamicApiController` 自动扫描无需额外配置，实体可直接引用框架基类，零成本隔离。
+>
+> **为什么前端用合并模式？** 因为 Admin.NET 前端使用 `import.meta.glob('../views/**/*.{vue,tsx}')` 自动发现 `views/` 下所有组件，只要页面文件在 `views/hjs/` 下，无需手动注册路由即可被菜单配置识别。
 
 ---
 
@@ -79,11 +123,14 @@
 
 ### 2.3 实体代码模板
 
+**文件位置**：`HJS_Platform/Entity/HjsXxx.cs`
+**命名空间**：`Admin.NET.Core.HJS_Platform.Entity`
+
 ```csharp
 using SqlSugar;
 using Admin.NET.Core.Entity;
 
-namespace Admin.NET.Core.Entity;
+namespace Admin.NET.Core.HJS_Platform.Entity;
 
 /// <summary>业务表注释</summary>
 [SugarTable("hjs_xxx", "业务表描述")]
@@ -116,77 +163,70 @@ public class HjsXxx : EntityBase
 | `[SugarColumn(ColumnDescription = "...", Length = 100)]` | 列描述、长度、是否可空等 |
 | `[SugarIndex("index_{table}_A", nameof(Name), OrderByType.Asc)]` | 数据库索引 |
 | `[Navigate(NavigateType.OneToOne, nameof(ForeignKey))]` | 导航属性（一对一） |
-| `[Navigate(NavigateType.OneToMany, nameof(Child. ParentId))]` | 导航属性（一对多） |
+| `[Navigate(NavigateType.OneToMany, nameof(Child.ParentId))]` | 导航属性（一对多） |
 | `[SysTable]` | Admin.NET 系统表标识（CodeGen 识别用） |
 
 ---
 
 ## 3. DTO 输入输出层
 
-### 3.1 输入 DTO（Input）模式
+### 3.1 DTO 文件位置
 
-DTO 放在 `Service/{模块}/Dto/` 目录下，统一一个 `{表名}Input.cs` 文件。
+```
+HJS_Platform/Service/{模块}/Dto/
+    Hjs{业务}Input.cs     ← 所有入参集中在一个文件
+    Hjs{业务}Output.cs    ← 出参
+```
 
-#### 标准 CRUD 五件套
+**命名空间**：`Admin.NET.Core.HJS_Platform.Service`
+
+### 3.2 输入 DTO 模式
 
 ```csharp
 // ─── 分页查询入参 ───
-public class PageHjsXxxInput : BasePageInput
+public class PageHjsProductInput : BasePageInput
 {
-    /// <summary>按名称模糊搜索（可选过滤条件）</summary>
     public string Name { get; set; }
-
-    /// <summary>按状态过滤（可选）</summary>
     public StatusEnum? Status { get; set; }
 }
 
 // ─── 新增入参（继承实体，重写必填字段）───
-public class AddHjsXxxInput : HjsXxx
+public class AddHjsProductInput : HjsProduct
 {
     [Required(ErrorMessage = "名称为必填项")]
     public override string Name { get; set; }
 }
 
 // ─── 编辑入参（继承新增，复用校验）───
-public class UpdateHjsXxxInput : AddHjsXxxInput { }
+public class UpdateHjsProductInput : AddHjsProductInput { }
 
 // ─── 删除入参 ───
-public class DeleteHjsXxxInput : BaseIdInput { }
+public class DeleteHjsProductInput : BaseIdInput { }
 
-// ─── 批量删除入参（如需要）───
-public class BatchDeleteHjsXxxInput : BaseIdInput { }
+// ─── 状态切换入参（如需要）───
+public class HjsProductStatusInput : BaseStatusInput { }
 ```
 
-#### 基类输入说明
-
-| 基类 | 字段 | 适用方法 |
-|------|------|---------|
-| `BasePageInput` | `Page`, `PageSize`, `Field`, `Order` | 分页查询 |
-| `BaseIdInput` | `Id` (long) | `GetDetail`, `Delete` |
-| `BaseStatusInput` | `Id`, `Status` | 状态切换 |
-| 实体类本身 | 所有字段 | `Add`, `Update` |
-
-### 3.2 输出 DTO（Output）模式
+### 3.3 输出 DTO 模式
 
 ```csharp
-// ─── 方式一：继承实体 + 追加关联字段（推荐）───
-public class HjsXxxOutput : HjsXxx
+// ─── 推荐：继承实体 + 追加关联字段 ───
+public class HjsProductOutput : HjsProduct
 {
-    /// <summary>关联分类名称（从关联表查询）</summary>
     [SugarColumn(IsIgnore = true)]
     public string CategoryName { get; set; }
 }
 
-// ─── 方式二：独立 DTO（复杂场景）───
-public class HjsXxxTreeOutput
+// ─── 复杂树形结构用独立 DTO ───
+public class HjsTreeOutput
 {
     public long Id { get; set; }
     public string Label { get; set; }
-    public List<HjsXxxTreeOutput> Children { get; set; }
+    public List<HjsTreeOutput> Children { get; set; }
 }
 ```
 
-**字段约定**：`[SugarColumn(IsIgnore = true)]` 标记非数据库字段，由 Service 层通过 `.Mapper()` 或 SQL 关联赋值。
+> **约定**：`[SugarColumn(IsIgnore = true)]` 标记非数据库字段，由 Service 层通过 `Select()` 投影或 `.Mapper()` 赋值。
 
 ---
 
@@ -194,7 +234,7 @@ public class HjsXxxTreeOutput
 
 ### 4.1 核心原则
 
-- 实现 `IDynamicApiController` → Furion 自动生成 REST API 路由，**无需手写 Controller**
+- 实现 `IDynamicApiController` → **无需手写 Controller**，Furion 自动生成 REST API
 - 注册 `ITransient` → 每次请求创建新实例
 - 通过构造函数注入 `SqlSugarRepository<TEntity>`
 - 方法命名约定即路由约定
@@ -203,36 +243,41 @@ public class HjsXxxTreeOutput
 
 | 方法命名 | 生成路由 | HTTP 方法 |
 |---------|---------|----------|
-| `Page(...)` | `POST /api/hjsXxx/page` | POST |
-| `Add(...)` | `POST /api/hjsXxx/add` | POST |
-| `Update(...)` | `POST /api/hjsXxx/update` | POST |
-| `Delete(...)` | `POST /api/hjsXxx/delete` | POST |
-| `GetDetail(...)` | `GET /api/hjsXxx/detail` | GET (FROMQUERY) |
-| `SetStatus(...)` | `POST /api/hjsXxx/setStatus` | POST |
+| `Page(...)` | `POST /api/hjsProduct/page` | POST |
+| `Add(...)` | `POST /api/hjsProduct/add` | POST |
+| `Update(...)` | `POST /api/hjsProduct/update` | POST |
+| `Delete(...)` | `POST /api/hjsProduct/delete` | POST |
+| `GetDetail(...)` | `GET /api/hjsProduct/detail` | GET (FromQuery) |
+| `SetStatus(...)` | `POST /api/hjsProduct/setStatus` | POST |
 
-> **命名说明**：路由路径 `api/` 后的首字母自动转为小写驼峰（`HjsXxx` → `hjsXxx`）。  
-> `[ApiDescriptionSettings(Name = "CustomName")]` 可覆盖默认路由名。
+> **路由生成规则**：`HjsProductService` → 首字母小写驼峰 → `hjsProduct` → `/api/hjsProduct/{方法名}`。  
+> 方法名以 `Get` 开头时自动改为 GET，且路由中省略 `Get` 前缀。  
+> `[ApiDescriptionSettings(Name = "Custom")]` 可覆盖默认路由名。
 
-### 4.3 标准 CRUD Service 模板
+### 4.3 Service 文件位置和模板
+
+**文件位置**：`HJS_Platform/Service/Product/HjsProductService.cs`
+**命名空间**：`Admin.NET.Core.HJS_Platform.Service`
 
 ```csharp
-using Admin.NET.Core.Service;
-using Admin.NET.Core.Entity;
+using Admin.NET.Core.HJS_Platform.Entity;
+using Admin.NET.Core.HJS_Platform.Service;
 using Furion.DynamicApiController;
 using Mapster;
 using Microsoft.AspNetCore.Mvc;
+using SqlSugar;
 
-namespace Admin.NET.Core.Service;
+namespace Admin.NET.Core.HJS_Platform.Service;
 
-/// <summary>业务管理</summary>
-[ApiDescriptionSettings(Order = 100)] // Order 控制 API 文档排序
-public class HjsXxxService : IDynamicApiController, ITransient
+/// <summary>产品管理</summary>
+[ApiDescriptionSettings(Order = 100)]
+public class HjsProductService : IDynamicApiController, ITransient
 {
-    private readonly SqlSugarRepository<HjsXxx> _rep;
+    private readonly SqlSugarRepository<HjsProduct> _rep;
     private readonly UserManager _userManager;
 
-    public HjsXxxService(
-        SqlSugarRepository<HjsXxx> rep,
+    public HjsProductService(
+        SqlSugarRepository<HjsProduct> rep,
         UserManager userManager)
     {
         _rep = rep;
@@ -243,18 +288,17 @@ public class HjsXxxService : IDynamicApiController, ITransient
     //  1. 分页查询
     // ═══════════════════════════════════════
     [ApiDescriptionSettings(Name = "Page"), HttpPost]
-    public async Task<SqlSugarPagedList<HjsXxxOutput>> Page(PageHjsXxxInput input)
+    public async Task<SqlSugarPagedList<HjsProductOutput>> Page(PageHjsProductInput input)
     {
         return await _rep.AsQueryable()
             .WhereIF(!string.IsNullOrWhiteSpace(input.Name),
                 u => u.Name.Contains(input.Name))
             .WhereIF(input.Status.HasValue,
                 u => u.Status == input.Status)
-            // .Includes(u => u.Category)  // 导航属性 Include
             .OrderBy(u => u.OrderNo)
-            .Select(u => new HjsXxxOutput
+            .Select(u => new HjsProductOutput
             {
-                CategoryName = u.Category.Name, // 关联字段赋值
+                CategoryName = u.Category.Name,
             })
             .ToPagedListAsync(input.Page, input.PageSize);
     }
@@ -262,12 +306,11 @@ public class HjsXxxService : IDynamicApiController, ITransient
     // ═══════════════════════════════════════
     //  2. 详情
     // ═══════════════════════════════════════
-    public async Task<HjsXxxOutput> GetDetail([FromQuery] BaseIdInput input)
+    public async Task<HjsProductOutput> GetDetail([FromQuery] BaseIdInput input)
     {
         return await _rep.AsQueryable()
             .Where(u => u.Id == input.Id)
-            // .Includes(u => u.Category)
-            .Select(u => new HjsXxxOutput
+            .Select(u => new HjsProductOutput
             {
                 CategoryName = u.Category.Name,
             })
@@ -278,9 +321,9 @@ public class HjsXxxService : IDynamicApiController, ITransient
     //  3. 新增
     // ═══════════════════════════════════════
     [ApiDescriptionSettings(Name = "Add"), HttpPost]
-    public async Task<long> Add(AddHjsXxxInput input)
+    public async Task<long> Add(AddHjsProductInput input)
     {
-        var entity = input.Adapt<HjsXxx>();
+        var entity = input.Adapt<HjsProduct>();
         await _rep.InsertAsync(entity);
         return entity.Id;
     }
@@ -289,12 +332,11 @@ public class HjsXxxService : IDynamicApiController, ITransient
     //  4. 编辑
     // ═══════════════════════════════════════
     [ApiDescriptionSettings(Name = "Update"), HttpPost]
-    public async Task Update(UpdateHjsXxxInput input)
+    public async Task Update(UpdateHjsProductInput input)
     {
         var entity = await _rep.GetFirstAsync(u => u.Id == input.Id)
             ?? throw Oops.Oh("数据不存在");
-
-        input.Adapt(entity); // Mapster 更新已有实体
+        input.Adapt(entity);
         await _rep.UpdateAsync(entity);
     }
 
@@ -302,19 +344,9 @@ public class HjsXxxService : IDynamicApiController, ITransient
     //  5. 删除
     // ═══════════════════════════════════════
     [ApiDescriptionSettings(Name = "Delete"), HttpPost]
-    public async Task Delete(DeleteHjsXxxInput input)
+    public async Task Delete(DeleteHjsProductInput input)
     {
         await _rep.DeleteAsync(u => u.Id == input.Id);
-    }
-
-    // ═══════════════════════════════════════
-    //  6. 批量删除（可选）
-    // ═══════════════════════════════════════
-    [ApiDescriptionSettings(Name = "BatchDelete"), HttpPost]
-    public async Task BatchDelete(List<DeleteHjsXxxInput> inputs)
-    {
-        var ids = inputs.Select(u => u.Id).ToList();
-        await _rep.DeleteAsync(u => ids.Contains(u.Id));
     }
 }
 ```
@@ -325,19 +357,18 @@ public class HjsXxxService : IDynamicApiController, ITransient
 |------|------|
 | `_rep.AsQueryable()` | 获取 IQueryable 查询对象 |
 | `.WhereIF(condition, expr)` | 条件过滤（condition 为 true 时才生效） |
-| `.Includes(u => u.Category)` | 加载导航属性（避免 N+1） |
+| `.Includes(u => u.Category)` | 加载导航属性 |
 | `.OrderBy(u => u.OrderNo)` | 排序 |
 | `.Select(u => new Dto { ... })` | 投影到输出 DTO |
-| `.ToPagedListAsync(page, size)` | 分页查询（返回 `SqlSugarPagedList<T>`） |
+| `.ToPagedListAsync(page, size)` | 分页查询 |
 | `.FirstAsync()` | 取第一条 |
 | `.ToListAsync()` | 取列表 |
 
 ### 4.5 业务异常抛出
 
 ```csharp
-throw Oops.Oh("数据不存在");          // 友好错误信息
+throw Oops.Oh("数据不存在");          // 返回 400 + 错误消息
 throw Oops.Oh("名称已存在，请重新输入");
-// Oops.Oh 由 Furion 提供，自动返回 400 状态码 + 错误消息
 ```
 
 ---
@@ -347,7 +378,7 @@ throw Oops.Oh("名称已存在，请重新输入");
 ### 5.1 API 文件位置
 
 ```
-src/api/{模块}/{小写表名}.ts
+src/api/hjs/{表名}.ts
 ```
 
 ### 5.2 API 模板
@@ -356,50 +387,43 @@ src/api/{模块}/{小写表名}.ts
 import request from '/@/utils/request';
 
 /**
- * ❖ 业务管理 - API
+ * ❖ 产品管理 - API
  */
 
-// ─── 分页查询 ───
-export function pageHjsXxx(data: any) {
-    return request.post<any>(`/api/hjsXxx/page`, data);
+export function pageHjsProduct(data: any) {
+    return request.post<any>(`/api/hjsProduct/page`, data);
 }
 
-// ─── 详情 ───
-export function getHjsXxxDetail(params: { id: number }) {
-    return request.get<any>(`/api/hjsXxx/detail`, { params });
+export function getHjsProductDetail(params: { id: number }) {
+    return request.get<any>(`/api/hjsProduct/detail`, { params });
 }
 
-// ─── 新增 ───
-export function addHjsXxx(data: any) {
-    return request.post<any>(`/api/hjsXxx/add`, data);
+export function addHjsProduct(data: any) {
+    return request.post<any>(`/api/hjsProduct/add`, data);
 }
 
-// ─── 编辑 ───
-export function updateHjsXxx(data: any) {
-    return request.post<any>(`/api/hjsXxx/update`, data);
+export function updateHjsProduct(data: any) {
+    return request.post<any>(`/api/hjsProduct/update`, data);
 }
 
-// ─── 删除 ───
-export function deleteHjsXxx(data: { id: number }) {
-    return request.post<any>(`/api/hjsXxx/delete`, data);
+export function deleteHjsProduct(data: { id: number }) {
+    return request.post<any>(`/api/hjsProduct/delete`, data);
 }
 ```
 
-> **注意**：Admin.NET 前端已集成了 Swagger 自动生成 API 服务（`src/api-services/` 目录）。  
-> 如果开启了自动生成，可直接使用 `api-services/` 下的类型化 API 类，无需手写上述文件。  
-> 手动编写则集中在 `src/api/` 目录下。
+> **注意**：如果开启了 Swagger 自动生成 API 服务（`src/api-services/`），可用自动生成的类型化 API 类替换手动文件。
 
 ---
 
 ## 6. 前端页面层
 
-### 6.1 标准 CRUD 页面结构
+### 6.1 页面结构
 
 ```
-views/{模块}/
-    index.vue                    ← 主页面（表格 + 查询 + 操作按钮）
+views/hjs/{表名}/
+    index.vue                    ← 主页面（表格 + 搜索 + 操作按钮）
     component/
-        editDialog.vue           ← 新增/编辑弹窗表单
+        editDialog.vue           ← 新增/编辑弹窗
 ```
 
 ### 6.2 主页面模板（index.vue）
@@ -420,7 +444,7 @@ views/{模块}/
 
     <!-- 操作按钮 -->
     <div>
-      <el-button type="primary" v-auth="'hjsXxx:add'" @click="onAdd">
+      <el-button type="primary" v-auth="'hjsProduct:add'" @click="onAdd">
         新增
       </el-button>
     </div>
@@ -440,9 +464,9 @@ views/{模块}/
       <el-table-column prop="createTime" label="创建时间" width="170" />
       <el-table-column label="操作" width="200" fixed="right">
         <template #default="{ row }">
-          <el-button link type="primary" v-auth="'hjsXxx:update'"
+          <el-button link type="primary" v-auth="'hjsProduct:update'"
             @click="onEdit(row)">编辑</el-button>
-          <el-button link type="danger" v-auth="'hjsXxx:delete'"
+          <el-button link type="danger" v-auth="'hjsProduct:delete'"
             @click="onDelete(row)">删除</el-button>
         </template>
       </el-table-column>
@@ -457,32 +481,27 @@ views/{模块}/
   </div>
 </template>
 
-<script setup lang="ts" name="hjsXxx">
+<script setup lang="ts" name="hjsProduct">
 import { reactive, ref, onMounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import {
-  pageHjsXxx,
-  deleteHjsXxx,
-} from '/@/api/{模块}/hjsXxx';
+  pageHjsProduct,
+  deleteHjsProduct,
+} from '/@/api/hjs/product';
 import EditDialog from './component/editDialog.vue';
 
 const editDialogRef = ref();
 const state = reactive({
   loading: false,
-  query: {
-    Page: 1,
-    PageSize: 20,
-    Name: '',
-  },
+  query: { Page: 1, PageSize: 20, Name: '' },
   tableData: [] as any[],
   total: 0,
 });
 
-// 获取列表
 const getList = async () => {
   state.loading = true;
   try {
-    const res = await pageHjsXxx(state.query);
+    const res = await pageHjsProduct(state.query);
     state.tableData = res.result?.items ?? [];
     state.total = res.result?.total ?? 0;
   } finally {
@@ -490,29 +509,14 @@ const getList = async () => {
   }
 };
 
-// 查询
-const onSearch = () => {
-  state.query.Page = 1;
-  getList();
-};
-
-// 重置
-const onReset = () => {
-  state.query.Name = '';
-  onSearch();
-};
-
-// 新增
+const onSearch = () => { state.query.Page = 1; getList(); };
+const onReset = () => { state.query.Name = ''; onSearch(); };
 const onAdd = () => editDialogRef.value?.open();
-
-// 编辑
 const onEdit = (row: any) => editDialogRef.value?.open(row);
-
-// 删除
 const onDelete = (row: any) => {
   ElMessageBox.confirm(`确认删除"${row.name}"？`, '提示')
     .then(async () => {
-      await deleteHjsXxx({ id: row.id });
+      await deleteHjsProduct({ id: row.id });
       ElMessage.success('删除成功');
       getList();
     })
@@ -554,10 +558,7 @@ onMounted(() => getList());
 <script setup lang="ts">
 import { reactive, ref } from 'vue';
 import { ElMessage } from 'element-plus';
-import {
-  addHjsXxx,
-  updateHjsXxx,
-} from '/@/api/{模块}/hjsXxx';
+import { addHjsProduct, updateHjsProduct } from '/@/api/hjs/product';
 
 const emit = defineEmits(['refresh']);
 const formRef = ref();
@@ -566,19 +567,13 @@ const state = reactive({
   visible: false,
   submitting: false,
   title: '',
-  form: {
-    id: undefined as number | undefined,
-    name: '',
-    status: 1,
-    orderNo: 100,
-  },
+  form: { id: undefined as number | undefined, name: '', status: 1, orderNo: 100 },
 });
 
 const rules = {
   name: [{ required: true, message: '请输入名称', trigger: 'blur' }],
 };
 
-// 打开弹窗（新增/编辑）
 const open = (row?: any) => {
   if (row?.id) {
     state.title = '编辑';
@@ -590,17 +585,15 @@ const open = (row?: any) => {
   state.visible = true;
 };
 
-// 提交
 const onSubmit = async () => {
   const valid = await formRef.value?.validate().catch(() => false);
   if (!valid) return;
-
   state.submitting = true;
   try {
     if (state.form.id) {
-      await updateHjsXxx(state.form);
+      await updateHjsProduct(state.form);
     } else {
-      await addHjsXxx(state.form);
+      await addHjsProduct(state.form);
     }
     ElMessage.success(state.form.id ? '编辑成功' : '新增成功');
     state.visible = false;
@@ -616,30 +609,32 @@ defineExpose({ open });
 
 ### 6.4 v-auth 权限指令
 
-Admin.NET 内置了 `v-auth` 自定义指令，用于控制按钮级权限：
+内置指令，控制按钮级权限：
 
 ```html
-<el-button v-auth="'hjsXxx:page'"   >查询</el-button>
-<el-button v-auth="'hjsXxx:add'"    >新增</el-button>
-<el-button v-auth="'hjsXxx:update'" >编辑</el-button>
-<el-button v-auth="'hjsXxx:delete'" >删除</el-button>
+<el-button v-auth="'hjsProduct:page'"   >查询</el-button>
+<el-button v-auth="'hjsProduct:add'"    >新增</el-button>
+<el-button v-auth="'hjsProduct:update'" >编辑</el-button>
+<el-button v-auth="'hjsProduct:delete'" >删除</el-button>
 ```
 
-权限标识格式：`{路由名}:{操作}`，路由名即 Service 所在模块的小写驼峰。
+> 权限标识 `hjsProduct:add` 由两部分组成：`{路由名}:{操作}`。  
+> 路由名对应后端 Service 类名的小写驼峰（`HjsProductService` → `hjsProduct`）。  
+> 这些按钮菜单需要在后台"菜单管理"中配置（见第 8 章）。
 
 ---
 
 ## 7. 完整示例：产品管理
 
-贯穿以上所有规范的一个完整示例。
+> 场景：需要"产品管理"功能，字段包括：名称（必填）、分类（关联分类表）、单价、状态、排序号。支持 CRUD + 分页 + 按名称/状态筛选。
 
-### 7.1 需求描述
+### 7.1 Entity
 
-> 需要一个"产品管理"功能，字段：名称（必填）、分类（关联分类表）、单价、状态、排序号。支持 CRUD + 分页 + 按名称/状态筛选。
-
-### 7.2 Entity
+**文件**：`HJS_Platform/Entity/HjsProduct.cs`
 
 ```csharp
+namespace Admin.NET.Core.HJS_Platform.Entity;
+
 [SugarTable("hjs_product", "产品表")]
 [SysTable]
 public class HjsProduct : EntityBase
@@ -664,9 +659,12 @@ public class HjsProduct : EntityBase
 }
 ```
 
-### 7.3 DTO
+### 7.2 DTO
+
+**文件**：`HJS_Platform/Service/Product/Dto/HjsProductInput.cs` + `HjsProductOutput.cs`
 
 ```csharp
+// ── HjsProductInput.cs ──
 public class PageHjsProductInput : BasePageInput
 {
     public string Name { get; set; }
@@ -683,6 +681,7 @@ public class UpdateHjsProductInput : AddHjsProductInput { }
 
 public class DeleteHjsProductInput : BaseIdInput { }
 
+// ── HjsProductOutput.cs ──
 public class HjsProductOutput : HjsProduct
 {
     [SugarColumn(IsIgnore = true)]
@@ -690,105 +689,182 @@ public class HjsProductOutput : HjsProduct
 }
 ```
 
-### 7.4 Service
+### 7.3 Service
 
-```csharp
-[ApiDescriptionSettings(Order = 100)]
-public class HjsProductService : IDynamicApiController, ITransient
-{
-    private readonly SqlSugarRepository<HjsProduct> _rep;
+**文件**：`HJS_Platform/Service/Product/HjsProductService.cs`（见第 4.3 节模板，替换 HjsProduct）
 
-    public HjsProductService(SqlSugarRepository<HjsProduct> rep)
-    {
-        _rep = rep;
-    }
+### 7.4 前端页面
 
-    public async Task<SqlSugarPagedList<HjsProductOutput>> Page(PageHjsProductInput input)
-    {
-        return await _rep.AsQueryable()
-            .WhereIF(!string.IsNullOrWhiteSpace(input.Name),
-                u => u.Name.Contains(input.Name))
-            .WhereIF(input.Status.HasValue, u => u.Status == input.Status)
-            .Includes(u => u.Category)
-            .OrderBy(u => u.OrderNo)
-            .Select(u => new HjsProductOutput
-            {
-                CategoryName = u.Category.Name,
-            })
-            .ToPagedListAsync(input.Page, input.PageSize);
-    }
+- `src/api/hjs/product.ts` — 按第 5 章模板
+- `src/views/hjs/product/index.vue` — 按第 6.2 节模板
+- `src/views/hjs/product/component/editDialog.vue` — 按第 6.3 节模板
 
-    public async Task<HjsProductOutput> GetDetail([FromQuery] BaseIdInput input)
-    {
-        return await _rep.AsQueryable()
-            .Where(u => u.Id == input.Id)
-            .Includes(u => u.Category)
-            .Select(u => new HjsProductOutput
-            {
-                CategoryName = u.Category.Name,
-            })
-            .FirstAsync();
-    }
+### 7.5 完整文件创建清单
 
-    [ApiDescriptionSettings(Name = "Add"), HttpPost]
-    public async Task<long> Add(AddHjsProductInput input)
-    {
-        var entity = input.Adapt<HjsProduct>();
-        await _rep.InsertAsync(entity);
-        return entity.Id;
-    }
+| # | 文件路径 | 说明 |
+|---|---------|------|
+| 1 | `Admin.NET.Core/HJS_Platform/Entity/HjsProduct.cs` | 实体 |
+| 2 | `Admin.NET.Core/HJS_Platform/Service/Product/Dto/HjsProductInput.cs` | 输入 DTO |
+| 3 | `Admin.NET.Core/HJS_Platform/Service/Product/Dto/HjsProductOutput.cs` | 输出 DTO |
+| 4 | `Admin.NET.Core/HJS_Platform/Service/Product/HjsProductService.cs` | 服务 |
+| 5 | `Web/src/api/hjs/product.ts` | 前端 API |
+| 6 | `Web/src/views/hjs/product/index.vue` | 前端页面 |
+| 7 | `Web/src/views/hjs/product/component/editDialog.vue` | 前端弹窗 |
 
-    [ApiDescriptionSettings(Name = "Update"), HttpPost]
-    public async Task Update(UpdateHjsProductInput input)
-    {
-        var entity = await _rep.GetFirstAsync(u => u.Id == input.Id)
-            ?? throw Oops.Oh("产品不存在");
-        input.Adapt(entity);
-        await _rep.UpdateAsync(entity);
-    }
+---
 
-    [ApiDescriptionSettings(Name = "Delete"), HttpPost]
-    public async Task Delete(DeleteHjsProductInput input)
-    {
-        await _rep.DeleteAsync(u => u.Id == input.Id);
-    }
-}
+## 8. 菜单配置与权限关联（Admin.NET Web 后台）
+
+> 前后端代码开发完成后，下一步是在 Admin.NET 运行时页面中配置菜单和权限，将前端页面与后端 API 连接起来。
+
+### 8.1 整体流程
+
+```
+┌──────────┐    ┌───────────────┐    ┌───────────┐    ┌─────────┐
+│ 编写代码  │ -> │ 后台配置菜单   │ -> │ 分配角色   │ -> │ 验证访问 │
+│ Entity   │    │ 目录 / 菜单   │    │ 绑定权限   │    │ 登录查看 │
+│ Service  │    │ 按钮 / 权限   │    │ 分配用户   │    │ CRUD 操作│
+│ Vue 页面 │    │ 路由/组件路径 │    │           │    │         │
+└──────────┘    └───────────────┘    └───────────┘    └─────────┘
 ```
 
-### 7.5 前端页面
+### 8.2 菜单类型说明
 
-- `src/api/hjs/product.ts` — 按 5.2 模板
-- `src/views/hjs/product/index.vue` — 按 6.2 模板
-- `src/views/hjs/product/component/editDialog.vue` — 按 6.3 模板
+| 类型 | 枚举值 | 说明 | 是否在侧边栏显示 |
+|------|--------|------|----------------|
+| **目录（Dir）** | `1` | 分类容器，充当侧边栏的折叠分组 | ✅ 是 |
+| **菜单（Menu）** | `2` | 可点击的页面，需指定 Component 路径 | ✅ 是 |
+| **按钮（Btn）** | `3` | 仅用于权限标识，控制 `v-auth` 指令 | ❌ 否 |
 
-将 6.2 和 6.3 中的 `{模块}` 替换为 `hjs`，`{小写表名}` 替换为 `product` 即可。
+### 8.3 菜单配置字段说明
+
+| 字段 | 说明 | 填写示例 |
+|------|------|---------|
+| 菜单类型 | 目录 / 菜单 / 按钮 | `菜单` |
+| 菜单名称 | 侧边栏显示的文字 | `产品管理` |
+| 路由名称 | Vue Route name（小写驼峰） | `hjsProduct` |
+| 路由地址 | 浏览器 URL 路径 | `/hjs/product` |
+| 组件路径 | `src/views/` 下的路径（无 .vue 后缀） | `/hjs/product/index` |
+| 权限标识 | 按钮类型的权限代码（格式：`xxx:yyy`） | `hjsProduct:add` |
+| 图标 | Element Plus 图标名 | `ele-Goods` |
+| 排序号 | 侧边栏排序 | `100` |
+
+### 8.4 操作步骤（以"产品管理"为例）
+
+#### Step 1：登录 Admin.NET Web 应用
+
+使用管理员账号登录系统。
+
+#### Step 2：创建目录（用于分组）
+
+进入 **系统管理 → 菜单管理**，点击 **新增**：
+
+| 字段 | 填写值 |
+|------|--------|
+| 菜单类型 | `目录` |
+| 上级菜单 | `顶级` |
+| 菜单名称 | `HJS 业务` |
+| 路由名称 | `hjs` |
+| 路由地址 | `/hjs` |
+| 图标 | 选择一个（如 `ele-Setting`） |
+| 排序号 | `100` |
+| 状态 | `启用` |
+
+> 目录不需要填写"组件路径"。点击保存后在左侧菜单栏会生成一个名为"HJS 业务"的折叠分组。
+
+#### Step 3：创建菜单（绑定 Vue 页面）
+
+在"HJS 业务"目录下点 **新增**：
+
+| 字段 | 填写值 |
+|------|--------|
+| 菜单类型 | `菜单` |
+| 上级菜单 | 选择"HJS 业务" |
+| 菜单名称 | `产品管理` |
+| 路由名称 | `hjsProduct` |
+| 路由地址 | `/hjs/product` |
+| 组件路径 | `/hjs/product/index` |
+| 排序号 | `100` |
+| 状态 | `启用` |
+
+> **关键**：**组件路径** `/hjs/product/index` 将自动映射到 `src/views/hjs/product/index.vue`。  
+> Admin.NET 前端使用 `import.meta.glob('../views/**/*.{vue,tsx}')` 预先扫描了所有 `.vue` 文件，后台只需填写相对路径即可匹配。
+
+#### Step 4：创建按钮（配置权限标识）
+
+在产品管理菜单下，依次新增以下按钮：
+
+| 菜单类型 | 菜单名称 | 路由名称 | 权限标识 | 路由地址 | 路由参数 |
+|---------|---------|---------|---------|---------|---------|
+| `按钮` | `查询产品` | — | `hjsProduct:page` | — | — |
+| `按钮` | `新增产品` | — | `hjsProduct:add` | — | — |
+| `按钮` | `编辑产品` | — | `hjsProduct:update` | — | — |
+| `按钮` | `删除产品` | — | `hjsProduct:delete` | — | — |
+
+> 按钮不需要填写路由地址和组件路径。权限标识格式必须是 `模块:操作`（含冒号），这个标识将出现在登录时返回的 `buttons` 列表中，驱动前端的 `v-auth` 指令。
+
+#### Step 5：分配角色权限
+
+进入 **系统管理 → 角色管理**：
+
+1. 找到需要授权（如"管理员"角色），点击 **编辑**
+2. 切换到 **菜单授权** 标签页
+3. 在菜单树中勾选：
+   - `☐ HJS 业务`（目录）
+     - `☐ 产品管理`（菜单）
+       - `☐ 查询产品`（按钮）
+       - `☐ 新增产品`（按钮）
+       - `☐ 编辑产品`（按钮）
+       - `☐ 删除产品`（按钮）
+4. 点击 **保存**
+
+#### Step 6：分配用户角色
+
+确保测试用户绑定了上一步配置了权限的角色。  
+（可以在 **用户管理** 中查看用户的角色，或在角色管理中查看已分配的用户。）
+
+#### Step 7：刷新验证
+
+**退出登录 → 重新登录**。前端流程如下：
+
+```
+1. POST /api/sysAuth/login           → 登录获取 token
+2. GET  /api/sysAuth/userInfo        → 获取用户信息 + buttons 权限列表
+3. GET  /api/sysMenu/loginMenuTree   → 获取动态菜单树
+4. import.meta.glob 解析组件路径      → 动态加载 Vue 组件
+5. Vue Router.addRoute()              → 注册路由
+6. 侧边栏渲染菜单                     → 用户看到"HJS 业务 → 产品管理"
+7. v-auth 指令生效                   → 页面按钮按权限显示/隐藏
+```
+
+登录后，侧边栏应出现 **"HJS 业务"→"产品管理"**，点击即可看到你的 CRUD 页面。
 
 ---
 
 ## 附录
 
-### A. 文件创建清单
+### A. 升级 Admin.NET 时的注意事项
 
-每次新建一个 CRUD 模块时，需要创建以下文件：
+| 隔离内容 | 升级操作 |
+|---------|---------|
+| **后端** `Admin.NET.Core/HJS_Platform/` | 保留此目录不覆盖 |
+| **前端** `src/api/hjs/` | 覆盖后重新添加 |
+| **前端** `src/views/hjs/` | 覆盖后重新添加 |
+| **数据库菜单记录** | 保留（存储在数据库中，与代码无关） |
+
+### B. 文件创建清单速查
 
 | # | 文件路径 | 模板参考 |
 |---|---------|---------|
-| 1 | `Admin.NET.Core/Entity/HjsXxx.cs` | 2.3 |
-| 2 | `Admin.NET.Core/Service/{模块}/Dto/HjsXxxInput.cs` | 3.1 |
-| 3 | `Admin.NET.Core/Service/{模块}/Dto/HjsXxxOutput.cs` | 3.2 |
-| 4 | `Admin.NET.Core/Service/{模块}/HjsXxxService.cs` | 4.3 |
-| 5 | `Web/src/api/{模块}/{小写表名}.ts` | 5.2 |
-| 6 | `Web/src/views/{模块}/{小写表名}/index.vue` | 6.2 |
-| 7 | `Web/src/views/{模块}/{小写表名}/component/editDialog.vue` | 6.3 |
+| 1 | `Admin.NET.Core/HJS_Platform/Entity/Hjs{业务}.cs` | 2.3 |
+| 2 | `Admin.NET.Core/HJS_Platform/Service/{模块}/Dto/Hjs{业务}Input.cs` | 3.2 |
+| 3 | `Admin.NET.Core/HJS_Platform/Service/{模块}/Dto/Hjs{业务}Output.cs` | 3.3 |
+| 4 | `Admin.NET.Core/HJS_Platform/Service/{模块}/Hjs{业务}Service.cs` | 4.3 |
+| 5 | `Web/src/api/hjs/{小写表名}.ts` | 5.2 |
+| 6 | `Web/src/views/hjs/{小写表名}/index.vue` | 6.2 |
+| 7 | `Web/src/views/hjs/{小写表名}/component/editDialog.vue` | 6.3 |
 
-### B. 路由注册
-
-无需额外路由注册。Furion 根据 `IDynamicApiController` 自动扫描并注册路由，格式为：
-```
-POST /api/{小写驼峰模块名}/{方法路由名}
-```
-
-前端 Vue Router 需手动添加页面路由（Admin.NET 已有路由模块管理，可通过菜单管理后台配置）。
+> 创建完以上文件后，按第 8 章步骤在 Admin.NET Web 后台配置菜单 → 分配角色 → 刷新验证。
 
 ### C. 参考链接
 
